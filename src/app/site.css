@@ -1,0 +1,267 @@
+/* ============================================================================
+ * サンプルサイト（/[locale]/samples 配下）専用のスコープ。
+ * `src/app/[locale]/samples/layout.tsx` からのみ import する。
+ *
+ * ■ 2階建てにする
+ *   `.sample-shell`  … ハブ・画面設計ページ・8本の実装、全部に掛かる外側。
+ *                      変数の器と color-scheme だけを持つ。
+ *   `.sample-<slug>` … 1本ぶんの配色・書体。**Teciora のトークンを参照しない。**
+ *                      8本が「同じ人が作った1サイト」に見えないための線。
+ *
+ * ■ ここで絶対に宣言しないもの
+ *   overflow / transform / filter / backdrop-filter / contain / will-change。
+ *   1つでも入ると、子孫の position: sticky が**無言で**効かなくなる
+ *   （管理画面のサイドバーと予約の集計パネルが sticky）。検査 [10] が見ている。
+ *
+ * ■ 新しい1本を足すときにやること（他の7本の担当へ）
+ *   1. この下に `.sample-<slug>` を1ブロック足す。
+ *      必ず `--focus-ring` を自分の色で上書きすること。上書きを忘れると
+ *      Teciora のシアン（#00D1FF）が漏れて、配色を分けた意味が消える。
+ *   2. 見出しの `font-family: inherit` を書く。globals.css の
+ *      `h1,h2,h3,h4 { @apply font-display }` を打ち消すため。
+ *      samples.css は @layer に入っていないので、レイヤ付きの base より強い。
+ *   3. 和文の大きな見出しは **マイナス字間**（h1 -0.02em / h2 -0.01em）。
+ *      欧文のオーバーラインは正のまま（別物なので触らない）。
+ *   4. 幅の指定に `ch` を使わない。「0」の字幅なので和文では効かない
+ *      （同じ 62ch が書体によって 39 字にも 31 字にもなる）。`em` を使う。
+ * ==========================================================================*/
+
+.sample-shell {
+  /*
+   * 端末のダークモードで、UA が描く部品だけが黒くなる事故を止める。
+   * 8本とも明るい配色しか持たず `dark:` は1つも書いていない。
+   * 宣言が無いと <select>・チェックボックス・スクロールバーなど
+   * **UA が描くものだけ**が OS の設定に従って暗転し、配色が混ざる。
+   * ダークモードを作る宣言ではなく、作っていないことを宣言するための1行。
+   */
+  color-scheme: light;
+
+  /* 各サイトのヘッダー高。ページ内アンカーの scroll-margin-top が参照する。 */
+  --site-header-h: 56px;
+  --site-anchor-offset: calc(var(--site-header-h) + 16px);
+}
+
+@media (min-width: 768px) {
+  .sample-shell {
+    --site-header-h: 64px;
+  }
+}
+
+
+.sample-shell [id] {
+  scroll-margin-top: var(--site-anchor-offset);
+}
+
+/* ------------------------------------------------------------------
+ * ⚠ 濃い面の上の文字色について（8本共通の落とし穴）
+ * ------------------------------------------------------------------
+ * **`text-[var(--cream)]/80` は効かない。**
+ * Tailwind は不透明度つきの任意値を `rgb(var(--cream) / 0.8)` に展開する。
+ * 変数の中身が `#F3F0E8` のような色表記だと、この宣言は**無効**になって
+ * 丸ごと捨てられ、文字色は**継承した色**になる。
+ * `.sample-<slug> { color: var(--ink) }` を継承するので、
+ * **濃い面の上に濃い文字**が出る（ヒーローの和文が消える、で実際に踏んだ）。
+ * しかも親がたまたま明るい色を指定している場所では正しく見えるので、
+ * 画面によって出たり出なかったりする。
+ *
+ * 濃い面に載せる文字は、**不透明度を焼き込んだ変数**を使うこと。
+ * 各サイトが `--on-dark-*` を自分の地色で定義する（下の .sample-nagi 参照）。
+ * Teciora 自身の面（SiteFooter・アウトロ帯）は本体のトークンなので
+ * `text-white/80` のままでよい（`white` は実在のパレット色）。
+ * 検査 [S4] が `色-[var(--…)]/数字` の並びを禁止している。
+ * ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------
+ * 入力欄のフォーカスリング（8本共通）
+ * ------------------------------------------------------------------
+ * @tailwindcss/forms は input / select / textarea の :focus に
+ * `outline: 2px solid transparent` を当てる（リングは box-shadow で描く前提）。
+ * サンプル側はその既定リング（Tailwind の青）を消しているので、
+ * globals.css の `:where(...)` 規則（詳細度 0）は forms の規則に勝てず、
+ * **入力欄だけフォーカスリングが存在しない**状態になる。
+ * 枠線の色替えだけでは、フォーカス位置が 1px の色差でしか分からない。
+ * samples 配下に限って、各サイトの --focus-ring で描き直す。
+ * ------------------------------------------------------------------ */
+.sample-body :is(input, select, textarea, button, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring, #173c3b);
+  outline-offset: 2px;
+}
+
+/* 濃い面（管理画面のサイドバーなど）の上では、リングを明るい側に振る。 */
+.sample-body .site-on-dark :is(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring-dark, #ffffff);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------
+ * 孤立行（行末に1〜2文字だけ残る行）について
+ * ------------------------------------------------------------------
+ * `text-wrap: pretty` を当てて実測したが、和文では行の割れ方が1文字も
+ * 変わらなかった。効かない指定を「対策した」体で残さない。孤立行は
+ * 行長（max-w の和字数）と文の長さの組み合わせで決まるので、直すときは
+ * そのどちらかを動かすこと。
+ * ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------
+ * 横スクロールする器（表・カレンダー）の共通クラス。
+ * overflow は **この要素自身** に付く。祖先には絶対に付けない。
+ * ------------------------------------------------------------------ */
+.sample-body .site-scroll-x {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ------------------------------------------------------------------
+ * 動きを減らす設定のときは、ループ動画を出さない（`SiteVideo`）。
+ * Figma の `NAGI / Motion & interaction guide` の指定
+ * （「動きを減らす設定ではズームと移動を無効化」）。
+ *
+ * 歯止めは2つある。1つめは `<source media="(prefers-reduced-motion:
+ * no-preference)">` で、**資源選択の段階で候補が0本になる**ので
+ * 1バイトも取りに行かない。ここはその2つめで、`media` 属性を無視する
+ * 実装が仮にあっても動くものを出さないための保険である。
+ *
+ * **動画を消してもヒーローは空にならない。**ポスターは器の
+ * `background-image` にも置いてあり（`SiteVideo` のインラインスタイル）、
+ * 同じ URL なので取得は1回で済む。
+ * ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  .sample-body .site-video-motion {
+    display: none;
+  }
+}
+
+
+
+/* ============================================================================
+ * mell — 季節の花を月2回届ける定期便
+ *
+ * 生成りのクリームに深緑、状態の面は若草色、質問の帯は薄紅。
+ * 見出しは明朝（和文は端末の明朝）、欧文のワードマークだけ高コントラストの
+ * セリフ（Playfair Display）。角は丸く、CTA は丸帯。
+ * 書き出しから拾った実測値:
+ *   クリーム #FFF9F2 / 深緑 #334332 / 若草 #E5ECDA / 薄紅 #F2C6B7
+ * ==========================================================================*/
+.sample-mell {
+  --focus-ring: #334332;
+  --focus-ring-dark: #fff9f2;
+
+  --ink: #2b3a2a; /* 対 --cream 11.7:1 */
+  --sub: #66705f; /* 対 --cream 5.3:1 */
+  --line: #ece0d3;
+  --line-strong: #d6c8b8;
+  --paper: #ffffff;
+  --cream: #fff9f2;
+  --alert: #a33b22; /* 対 --cream 6.1:1 */
+
+  --green: #334332; /* 白文字 10.2:1 */
+  --green-deep: #24301f;
+  --soft: #e5ecda; /* 若草の面 */
+  --soft-ink: #2b3a2a; /* 対 --soft 10.2:1 */
+
+  /* よくあるご質問の帯。 */
+  --blush: #f2c6b7;
+  --blush-ink: #4a2c20; /* 対 --blush 8.4:1 */
+  --blush-line: #dda893; /* 薄紅の面の上の細い罫 */
+
+  --field-radius: 10px;
+
+  /* 深緑の面の上。**不透明度を焼き込む**（var() に /80 を付けると消える）。 */
+  --on-dark-strong: rgba(255, 249, 242, 0.93);
+  --on-dark-soft: rgba(255, 249, 242, 0.82);
+  --on-dark-faint: rgba(255, 249, 242, 0.72);
+  --on-dark-line: rgba(255, 249, 242, 0.26);
+  --on-dark-line-strong: rgba(255, 249, 242, 0.55);
+  --on-dark-fill: rgba(255, 249, 242, 0.12);
+
+  font-family: var(--font-noto-sans-jp), 'Hiragino Sans', 'Noto Sans JP',
+    'Yu Gothic', sans-serif;
+  color: var(--ink);
+}
+
+/* 和文の見出しは明朝。端末の明朝に任せる（和文を webfont で読まない）。 */
+.sample-mell h1,
+.sample-mell h2,
+.sample-mell h3,
+.sample-mell h4,
+.sample-mell h5 {
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'YuMincho', 'Noto Serif JP',
+    serif;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.sample-mell h1 {
+  letter-spacing: -0.02em;
+}
+.sample-mell h2 {
+  letter-spacing: -0.01em;
+}
+/* 管理画面の見出しだけはゴシックに戻す（数と状態を読む画面なので）。 */
+.sample-mell .mell-admin :is(h1, h2, h3, h4, h5) {
+  font-family: inherit;
+  font-weight: 700;
+}
+
+/*
+ * ⚠ <select> は「いちばん長い option の幅」より狭くならない（Chromium）。
+ *   `w-full`（width:100%）を書いても使用幅は option のままで、**ページ全体に
+ *   横スクロールが出る**。min-width:0 も text-overflow も効かず、効くのは
+ *   max-width だけ。幅 240px / 文字スケール 200% で再現する。
+ *   共有部品（fields.tsx）は他の6本と共用なので、**このサイトのスコープ内**で
+ *   当てる。
+ */
+.sample-mell select {
+  max-width: 100%;
+}
+
+/* 欧文のワードマーク（mell）。和文には当てない。 */
+.sample-mell .mell-wordmark {
+  font-family: var(--font-mell-serif), 'Playfair Display', 'Times New Roman',
+    serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/*
+ * 花の地（2026-09-18 に写真を入れた）。アーチ型の切り抜き（`.mell-arch`）は
+ * そのままで、その中に `public/samples/mell/` の写真が `<img>` で乗る。
+ * **クラスは残してある**: 写真が届くまで／読み込みに失敗したときに、
+ * 面の明度が動かないため。
+ *
+ * ■ 4枚は同じ壁・同じ台・同じ花瓶・同じ光で撮ってある
+ *   本文の「花瓶も光も置き場所も同じにして、花だけを替えて撮っています」は
+ *   **文言ではなく写真そのものの条件**である。差し替えるときも同じ条件で。
+ */
+.sample-mell .mell-arch {
+  border-radius: 999px 999px 12px 12px;
+}
+.sample-mell .mell-bouquet-spring {
+  background-color: #efe0cf;
+  background-image:
+    radial-gradient(55% 40% at 50% 26%, rgba(255, 244, 222, 0.92) 0%, rgba(255, 244, 222, 0) 70%),
+    radial-gradient(38% 26% at 34% 34%, rgba(214, 196, 226, 0.75) 0%, rgba(214, 196, 226, 0) 72%),
+    radial-gradient(40% 28% at 64% 30%, rgba(244, 190, 150, 0.8) 0%, rgba(244, 190, 150, 0) 74%),
+    linear-gradient(180deg, #f3e6d5 0%, #e7d6c2 62%, #d8c3ab 100%);
+}
+.sample-mell .mell-bouquet-summer {
+  background-color: #eee6cd;
+  background-image:
+    radial-gradient(52% 38% at 48% 26%, rgba(255, 233, 150, 0.9) 0%, rgba(255, 233, 150, 0) 70%),
+    radial-gradient(40% 30% at 68% 36%, rgba(198, 214, 160, 0.8) 0%, rgba(198, 214, 160, 0) 74%),
+    linear-gradient(180deg, #f4ecd6 0%, #e6dcc0 60%, #d5caa9 100%);
+}
+.sample-mell .mell-bouquet-autumn {
+  background-color: #e6d4c0;
+  background-image:
+    radial-gradient(52% 38% at 50% 28%, rgba(216, 118, 78, 0.78) 0%, rgba(216, 118, 78, 0) 70%),
+    radial-gradient(36% 26% at 30% 34%, rgba(150, 52, 52, 0.62) 0%, rgba(150, 52, 52, 0) 72%),
+    linear-gradient(180deg, #ecd9c3 0%, #ddc4a9 58%, #c9a98c 100%);
+}
+.sample-mell .mell-bouquet-winter {
+  background-color: #e4e5df;
+  background-image:
+    radial-gradient(52% 38% at 50% 26%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 68%),
+    radial-gradient(40% 30% at 66% 38%, rgba(140, 162, 140, 0.55) 0%, rgba(140, 162, 140, 0) 74%),
+    linear-gradient(180deg, #eef0ea 0%, #dde1d8 60%, #c9cfc4 100%);
+}
